@@ -1,0 +1,82 @@
+name: CI - App Suporte
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validar:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Obter codigo
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Configurar Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+
+      - name: Verificar ficheiros
+        run: |
+          test -f README.md
+          test -f OPERACOES.md
+          test -f Dockerfile
+          test -f app.py
+          grep -qx 'status=HEALTHY' status.txt
+
+      - name: Executar testes
+        run: python -m unittest discover -s tests -v
+
+  construir:
+    needs: validar
+    runs-on: ubuntu-latest
+    env:
+      COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+
+    steps:
+      - name: Obter codigo
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Identificar commit
+        run: |
+          echo "Commit do build: ${COMMIT_SHA}"
+          echo "SHORT_SHA=${COMMIT_SHA::7}" >> "$GITHUB_ENV"
+
+      - name: Construir imagem
+        run: |
+          docker build \
+            --label org.opencontainers.image.revision="${COMMIT_SHA}" \
+            -t app-suporte:ci \
+            -t "app-suporte:sha-${SHORT_SHA}" .
+          docker image inspect app-suporte:ci \
+            --format 'Imagem {{.Id}} construida a partir do commit {{ index .Config.Labels "org.opencontainers.image.revision" }}'
+
+      - name: Executar smoke test
+        run: |
+          docker run -d \
+            --name app-ci \
+            -p 127.0.0.1:18000:8000 \
+            app-suporte:ci
+
+          trap 'docker rm -f app-ci >/dev/null 2>&1 || true' EXIT
+
+          for i in {1..20}; do
+            if curl -fsS http://127.0.0.1:18000/health; then
+              echo "Smoke test OK"
+              exit 0
+            fi
+            sleep 1
+          done
+
+          docker logs app-ci
+          exit 1
