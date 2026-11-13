@@ -38,6 +38,8 @@ jobs:
   construir:
     needs: validar
     runs-on: ubuntu-latest
+    env:
+      COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
 
     steps:
       - name: Obter codigo
@@ -45,8 +47,19 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Identificar commit
+        run: |
+          echo "Commit do build: ${COMMIT_SHA}"
+          echo "SHORT_SHA=${COMMIT_SHA::7}" >> "$GITHUB_ENV"
+
       - name: Construir imagem
-        run: docker build -t app-suporte:ci .
+        run: |
+          docker build \
+            --label org.opencontainers.image.revision="${COMMIT_SHA}" \
+            -t app-suporte:ci \
+            -t "app-suporte:sha-${SHORT_SHA}" .
+          docker image inspect app-suporte:ci \
+            --format 'Imagem {{.Id}} construida a partir do commit {{ index .Config.Labels "org.opencontainers.image.revision" }}'
 
       - name: Executar smoke test
         run: |
