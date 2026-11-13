@@ -20,6 +20,7 @@ class Handler(BaseHTTPRequestHandler):
 
         status = read_status()
         code = 200 if is_healthy(status) else 503
+        self.log_message("health_check path=%s result=%s http=%d", self.path, status, code)
         payload = (status + "\n").encode("utf-8")
 
         self.send_response(code)
