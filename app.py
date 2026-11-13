@@ -14,7 +14,7 @@ def is_healthy(status):
 
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
-        if self.path != "/status":
+        if self.path != "/health":
             self.send_error(404)
             return
 
